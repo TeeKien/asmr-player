@@ -1,5 +1,7 @@
 # ✦ ASMR Player with Subtitle Display
 
+![ASMR Player Screenshot](sample.png)
+
 A minimal, portable ASMR audio player with real-time subtitle display and image gallery support.
 
 Designed for ASMR recordings, guided meditation, audiobooks, voice content, or any audio where you want synchronized text and visual content displayed together.

@@ -239,7 +239,7 @@ class ASMRPlayer(tk.Tk):
         self._img_tk   = None
 
         # Subtitle style
-        self.sub_font_size = 17
+        self.sub_font_size = 28
         self.sub_bold      = False
         self.sub_pos_idx   = 0   # index into SUB_POSITIONS
 
