@@ -2,18 +2,19 @@
 
 ![ASMR Player Screenshot](sample.png)
 
-A minimal, portable ASMR audio player with real-time subtitle display and image gallery support.
+A portable ASMR audio player with real-time subtitle display, image gallery, and keyboard controls.
 
 Designed for ASMR recordings, guided meditation, audiobooks, voice content, or any audio where you want synchronized text and visual content displayed together.
 
 Features:
 
-* 🎵 Audio playback with subtitle synchronization
-* 💬 Real-time SRT / VTT / TXT subtitle display
-* 🖼️ Built-in image gallery viewer
+* 🎵 Audio playback with auto-play on load
+* 💬 Real-time SRT / VTT / TXT subtitle display with font size, bold, and position controls
+* 🖼️ Built-in image gallery viewer with hide/show toggle
 * 📂 Folder-based auto loading of audio, subtitles, and images
 * 🎚️ Seek bar, volume control, skip controls
-* ✨ Customizable subtitle size, bold mode, and position
+* ⌨️ Full keyboard shortcut support
+* 🖱️ Hover tooltips on all buttons
 
 ---
 
@@ -34,7 +35,6 @@ Features:
 
 Double-click:
 
-			
 ```
 Launch ASMR Player.bat
 ```
@@ -81,7 +81,7 @@ python asmr_player.py
 | WebVTT | `.vtt`    | Web subtitle format             |
 | TXT    | `.txt`    | Timestamp-based subtitle format |
 
-Example TXT:
+Example TXT format:
 
 ```
 [00:00:00] Welcome, take a deep breath...
@@ -93,7 +93,7 @@ Example TXT:
 
 ## Images / Gallery
 
-The player supports displaying images together with audio playback.
+The player supports displaying images alongside audio playback.
 
 Supported image formats:
 
@@ -106,24 +106,39 @@ Supported image formats:
 | WebP   | `.webp`         |
 | TIFF   | `.tiff`         |
 
-Images are displayed in the main viewing area and can be browsed using:
+Images are displayed in the main viewing area and browsed using the `❮` / `❯` nav arrows on either side of the viewer. The arrows are hidden when no images or only a single image is loaded.
 
-```
-❮ Previous Image
-❯ Next Image
-```
+The current image number is displayed in the top-right corner of the viewer.
 
-The current image number is displayed in the top-right corner.
+Images can be loaded manually via the **🖼 Images** toolbar button (supports multi-select). Manually loaded images are preserved when switching audio tracks. Only the **📂 Folder** feature resets the gallery.
+
+---
+
+# Toolbar Buttons
+
+| Button              | Function                                          |
+| ------------------- | ------------------------------------------------- |
+| 🎵 Audio             | Load a single audio file                          |
+| 💬 Subtitle          | Load a subtitle file manually                     |
+| 🖼 Images            | Load one or more image files (multi-select)        |
+| 📂 Folder            | Load all audio, images, and subtitles from a folder |
+| A+                  | Increase subtitle font size                       |
+| A−                  | Decrease subtitle font size                       |
+| B                   | Toggle bold subtitle text                         |
+| ⬇ / ◉ / ⬆           | Cycle subtitle position: bottom → center → top    |
+| 🙈 / 🐵              | Hide / show the image viewer                      |
+
+Hovering any button displays a tooltip after 0.5 seconds.
 
 ---
 
 # Folder Auto-Load Feature
 
-Selecting a folder automatically scans the entire directory and loads:
+Selecting a folder via **📂 Folder** automatically scans the directory and loads:
 
-* Audio files → added into the playlist
+* Audio files → added to the playlist, auto-plays immediately
 * Image files → loaded into the image gallery
-* Subtitle files → automatically matched with audio tracks
+* Subtitle files → matched automatically when each track starts playing
 
 Example folder:
 
@@ -143,7 +158,7 @@ ASMR Session/
 
 After selecting this folder:
 
-* Audio files become the playback playlist
+* Audio files become the playback playlist and start playing automatically
 * Images become the visual gallery
 * Matching subtitles are loaded automatically when each track starts
 
@@ -180,18 +195,43 @@ Example:
 
 # Controls
 
-| Control                  | Action                             |
-| ------------------------ | ---------------------------------- |
-| ▶ / ⏸                    | Play / Pause                       |
-| ⏮ / ⏭                    | Previous / Next audio track        |
-| ⏪ / ⏩                    | Skip backward / forward 10 seconds |
-| Progress bar             | Click or drag to seek              |
-| Volume slider            | Adjust playback volume             |
-| A+                       | Increase subtitle size             |
-| A−                       | Decrease subtitle size             |
-| B                        | Toggle bold subtitles              |
-| Subtitle position button | Switch subtitle position           |
-| ❮ / ❯                    | Browse image gallery               |
+## Mouse
+
+| Control              | Action                             |
+| -------------------- | ---------------------------------- |
+| ▶ / ⏸                | Play / Pause                       |
+| ⏮ / ⏭               | Previous / Next audio track        |
+| ⏪ / ⏩               | Skip backward / forward 10 seconds |
+| Progress bar         | Click or drag to seek              |
+| Volume slider        | Adjust playback volume             |
+| A+ / A−              | Increase / decrease subtitle size  |
+| B                    | Toggle bold subtitles              |
+| ⬇ / ◉ / ⬆ button    | Cycle subtitle position            |
+| 🙈 / 🐵 button        | Hide / show image viewer           |
+| ❮ / ❯                | Browse image gallery               |
+
+## Keyboard Shortcuts
+
+| Key                  | Action                    |
+| -------------------- | ------------------------- |
+| `Space`              | Play / Pause              |
+| `←`                  | Rewind 10 seconds         |
+| `→`                  | Fast-forward 10 seconds   |
+| `↑`                  | Volume up 5%              |
+| `↓`                  | Volume down 5%            |
+| `+` / `=` / Numpad `+` | Next track              |
+| `-` / Numpad `-`     | Previous track            |
+
+---
+
+# Subtitle Display
+
+* Default font size: **28pt**
+* Font size range: 8pt – 48pt (adjustable with A+ / A−)
+* Subtitle text wraps automatically to fit the canvas width
+* Text position is clamped inside the canvas — subtitles are never cut off regardless of font size or text length
+* Subtitles render over images with an 8-directional text shadow for readability on any background
+* Three position modes: **bottom** (default), **center**, **top**
 
 ---
 
@@ -204,13 +244,11 @@ Requirements:
 * Python installed
 * Run `Launch ASMR Player.bat`
 
-No additional installation is required.
+No additional installation is required beyond Python itself.
 
 ---
 
 # Project Structure
-
-Example:
 
 ```
 ASMR Player/
@@ -221,4 +259,4 @@ ASMR Player/
 └── README.md
 ```
 
-Place your ASMR audio folders anywhere. The player will discover related audio, subtitle, and image files when you select a folder.
+Place your ASMR audio folders anywhere. The player discovers related audio, subtitle, and image files when you select a folder.

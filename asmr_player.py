@@ -190,6 +190,45 @@ def scan_folder(folder):
             images.append(full)
     return audio, images
 
+# ─── Tooltip ──────────────────────────────────────────────────────────────────
+
+class Tooltip:
+    """Show a tooltip after 500 ms hover on any widget."""
+    def __init__(self, widget, text):
+        self.widget  = widget
+        self.text    = text
+        self._job    = None
+        self._win    = None
+        widget.bind('<Enter>',  self._schedule, add='+')
+        widget.bind('<Leave>',  self._cancel,   add='+')
+        widget.bind('<Button>', self._cancel,   add='+')
+
+    def _schedule(self, _=None):
+        self._cancel()
+        self._job = self.widget.after(500, self._show)
+
+    def _cancel(self, _=None):
+        if self._job:
+            self.widget.after_cancel(self._job)
+            self._job = None
+        if self._win:
+            self._win.destroy()
+            self._win = None
+
+    def _show(self):
+        if not self.widget.winfo_exists():
+            return
+        x = self.widget.winfo_rootx() + 10
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
+        self._win = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f'+{x}+{y}')
+        tw.attributes('-topmost', True)
+        tk.Label(tw, text=self.text, bg='#2a2640', fg='#e8e4f0',
+                 font=('Segoe UI', 9), padx=8, pady=4,
+                 relief='flat', bd=0).pack()
+
+
 # ─── Main Application ────────────────────────────────────────────────────────
 
 class ASMRPlayer(tk.Tk):
@@ -234,9 +273,10 @@ class ASMRPlayer(tk.Tk):
         self.pl_index  = -1
 
         # Images
-        self.images    = []
-        self.img_index = -1
-        self._img_tk   = None
+        self.images       = []
+        self.img_index    = -1
+        self._img_tk      = None
+        self.images_hidden = False   # toggled by hide/show image button
 
         # Subtitle style
         self.sub_font_size = 28
@@ -258,48 +298,55 @@ class ASMRPlayer(tk.Tk):
         hdr.pack(fill='x', padx=22)
         tk.Label(hdr, text='✦ ASMR Player', bg=C['bg'], fg=C['accent'],
                  font=('Segoe UI', 17, 'bold')).pack(side='left')
-        tk.Label(hdr, text='with subtitle display', bg=C['bg'], fg=C['muted'],
+        tk.Label(hdr, text='with subtitle display', bg=C['bg'], fg=C['text'],
                  font=('Segoe UI', 10)).pack(side='left', padx=(10,0), pady=(4,0))
 
         # ── Toolbar ─────────────────────────────────────────────────────────
         tb = tk.Frame(self, bg=C['panel'], pady=9, padx=14)
         tb.pack(fill='x', padx=22, pady=(0, 7))
 
-        self._tbtn(tb, '🎵  Audio',    self._load_audio, size=10).pack(side='left', padx=(0,5))
-        self._tbtn(tb, '💬  Subtitle', self._load_sub,   size=10).pack(side='left', padx=(0,5))
-        self._tbtn(tb, '📂  Folder',   self._load_folder,size=10).pack(side='left', padx=(0,14))
+        self._tbtn(tb, '🎵  Audio',    self._load_audio,  size=10, tip='Load audio file').pack(side='left', padx=(0,5))
+        self._tbtn(tb, '💬  Subtitle', self._load_sub,    size=10, tip='Load subtitle file (.srt .vtt .txt)').pack(side='left', padx=(0,5))
+        self._tbtn(tb, '🖼  Images',   self._load_images, size=10, tip='Load image files (multi-select)').pack(side='left', padx=(0,5))
+        self._tbtn(tb, '📂  Folder',   self._load_folder, size=10, tip='Load folder (audio + images + subtitles)').pack(side='left', padx=(0,14))
 
         # Separator
         tk.Frame(tb, bg=C['muted'], width=1).pack(side='left', fill='y', pady=3, padx=(0,10))
 
         # Subtitle style controls
-        tk.Label(tb, text='Sub:', bg=C['panel'], fg=C['muted'],
+        tk.Label(tb, text='Sub:', bg=C['panel'], fg=C['text'],
                  font=('Segoe UI', 9)).pack(side='left', padx=(0,4))
-        self._tbtn(tb, 'A+', self._sub_bigger,       size=10, w=3).pack(side='left', padx=2)
-        self._tbtn(tb, 'A−', self._sub_smaller,      size=10, w=3).pack(side='left', padx=2)
-        self.btn_bold = self._tbtn(tb, 'B', self._sub_bold_toggle, size=11, w=3)
+        self._tbtn(tb, 'A+', self._sub_bigger,       size=10, w=3, tip='Increase subtitle size').pack(side='left', padx=2)
+        self._tbtn(tb, 'A−', self._sub_smaller,      size=10, w=3, tip='Decrease subtitle size').pack(side='left', padx=2)
+        self.btn_bold = self._tbtn(tb, 'B', self._sub_bold_toggle, size=11, w=3, tip='Toggle bold subtitle')
         self.btn_bold.pack(side='left', padx=2)
 
         # Subtitle position toggle
         tk.Frame(tb, bg=C['muted'], width=1).pack(side='left', fill='y', pady=3, padx=(8,8))
         self.btn_sub_pos = self._tbtn(tb, self.SUB_POS_ICONS['bottom'],
-                                      self._cycle_sub_pos, size=13, w=3)
+                                      self._cycle_sub_pos, size=13, w=3, tip='Cycle subtitle position (bottom / center / top)')
         self.btn_sub_pos.pack(side='left', padx=(0,3))
         self.lbl_sub_pos = tk.Label(tb, text='bottom', bg=C['panel'], fg=C['accent2'],
                                     font=('Segoe UI', 9))
         self.lbl_sub_pos.pack(side='left', padx=(0,6))
+
+        # Hide image toggle
+        tk.Frame(tb, bg=C['muted'], width=1).pack(side='left', fill='y', pady=3, padx=(6,8))
+        self.btn_hide_img = self._tbtn(tb, '🙈', self._toggle_hide_images, size=13, w=3,
+                                       tip='Hide / show image viewer')
+        self.btn_hide_img.pack(side='left', padx=(0,4))
 
         # ── Track / sub info block (right side) ─────────────────────────────
         info_frame = tk.Frame(tb, bg=C['panel'])
         info_frame.pack(side='right', padx=(8,0))
 
         self.track_label = tk.Label(info_frame, text='No audio loaded',
-                                    bg=C['panel'], fg=C['muted'],
+                                    bg=C['panel'], fg=C['text'],
                                     font=('Segoe UI', 9), anchor='e', justify='right')
         self.track_label.pack(anchor='e')
 
         self.sub_info_label = tk.Label(info_frame, text='',
-                                       bg=C['panel'], fg=C['accent2'],
+                                       bg=C['panel'], fg=C['text'],
                                        font=('Segoe UI', 8), anchor='e', justify='right')
         self.sub_info_label.pack(anchor='e')
 
@@ -307,30 +354,32 @@ class ASMRPlayer(tk.Tk):
         display_row = tk.Frame(self, bg=C['bg'])
         display_row.pack(fill='both', expand=True, padx=22, pady=(0,6))
 
+        # Create both arrow buttons but DON'T pack yet — _update_nav_arrows handles that.
+        # Pack order must be: prev LEFT, next RIGHT, then canvas fills the middle.
         self.btn_prev_img = tk.Button(
             display_row, text='❮', command=self._prev_image,
-            bg=C['bg'], fg=C['muted'], activebackground=C['bg'],
+            bg=C['bg'], fg=C['text'], activebackground=C['bg'],
             activeforeground=C['accent'], font=('Segoe UI', 22),
             relief='flat', bd=0, cursor='hand2', width=2)
-        self.btn_prev_img.pack(side='left', fill='y')
+        Tooltip(self.btn_prev_img, 'Previous image')
+
+        self.btn_next_img = tk.Button(
+            display_row, text='❯', command=self._next_image,
+            bg=C['bg'], fg=C['text'], activebackground=C['bg'],
+            activeforeground=C['accent'], font=('Segoe UI', 22),
+            relief='flat', bd=0, cursor='hand2', width=2)
+        Tooltip(self.btn_next_img, 'Next image')
 
         self.canvas = tk.Canvas(display_row, bg=C['panel2'],
                                 highlightthickness=1,
                                 highlightbackground=C['bar_bg'])
-        self.canvas.pack(side='left', fill='both', expand=True)
         self.canvas.bind('<Configure>', lambda e: self._redraw_canvas())
 
-        self.btn_next_img = tk.Button(
-            display_row, text='❯', command=self._next_image,
-            bg=C['bg'], fg=C['muted'], activebackground=C['bg'],
-            activeforeground=C['accent'], font=('Segoe UI', 22),
-            relief='flat', bd=0, cursor='hand2', width=2)
-        self.btn_next_img.pack(side='left', fill='y')
-
-        self._set_nav_arrows(False)
+        # Initial layout — arrows hidden, canvas fills row
+        self._update_nav_arrows()
 
         # ── Playlist / folder status ─────────────────────────────────────────
-        self.pl_label = tk.Label(self, text='', bg=C['bg'], fg=C['muted'],
+        self.pl_label = tk.Label(self, text='', bg=C['bg'], fg=C['text'],
                                  font=('Segoe UI', 9))
         self.pl_label.pack()
 
@@ -339,7 +388,7 @@ class ASMRPlayer(tk.Tk):
         prog_frame.pack(fill='x', pady=(3,5))
 
         self.time_label = tk.Label(prog_frame, text='0:00', bg=C['bg'],
-                                   fg=C['muted'], font=('Consolas', 10), width=7, anchor='e')
+                                   fg=C['text'], font=('Consolas', 10), width=7, anchor='e')
         self.time_label.pack(side='left')
 
         self.prog_canvas = tk.Canvas(prog_frame, bg=C['bar_bg'], height=12,
@@ -355,7 +404,7 @@ class ASMRPlayer(tk.Tk):
         self.prog_canvas.bind('<Leave>', lambda e: self.prog_canvas.itemconfig(self._prog_dot, state='hidden'))
 
         self.dur_label = tk.Label(prog_frame, text='0:00', bg=C['bg'],
-                                  fg=C['muted'], font=('Consolas', 10), width=7)
+                                  fg=C['text'], font=('Consolas', 10), width=7)
         self.dur_label.pack(side='left')
 
         # ── Transport controls ────────────────────────────────────────────────
@@ -363,8 +412,8 @@ class ASMRPlayer(tk.Tk):
         ctrl = tk.Frame(self, bg=C['bg'])
         ctrl.pack(pady=(3,10))
 
-        self._tbtn(ctrl, '⏮', self._prev_track,        size=14, w=3).pack(side='left', padx=5)
-        self._tbtn(ctrl, '⏪', lambda: self._skip(-10), size=14, w=3).pack(side='left', padx=5)
+        self._tbtn(ctrl, '⏮', self._prev_track,        size=14, w=3, tip='Previous track  [−]').pack(side='left', padx=5)
+        self._tbtn(ctrl, '⏪', lambda: self._skip(-10), size=14, w=3, tip='Rewind 10 s  [←]').pack(side='left', padx=5)
 
         self.btn_play = tk.Button(ctrl, text='▶', command=self._toggle_play,
                                   bg=C['panel'], fg=C['accent'],
@@ -372,32 +421,40 @@ class ASMRPlayer(tk.Tk):
                                   font=('Segoe UI', 24), relief='flat', bd=0,
                                   cursor='hand2', width=3, pady=3)
         self.btn_play.pack(side='left', padx=10)
+        Tooltip(self.btn_play, 'Play / Pause  [Space]')
 
-        self._tbtn(ctrl, '⏩', lambda: self._skip(10),  size=14, w=3).pack(side='left', padx=5)
-        self._tbtn(ctrl, '⏭', self._next_track,        size=14, w=3).pack(side='left', padx=5)
+        self._tbtn(ctrl, '⏩', lambda: self._skip(10),  size=14, w=3, tip='Fast-forward 10 s  [→]').pack(side='left', padx=5)
+        self._tbtn(ctrl, '⏭', self._next_track,        size=14, w=3, tip='Next track  [+]').pack(side='left', padx=5)
 
         # Volume
-        tk.Label(ctrl, text='🔊', bg=C['bg'], fg=C['muted'],
+        tk.Label(ctrl, text='🔊', bg=C['bg'], fg=C['text'],
                  font=('Segoe UI', 13)).pack(side='left', padx=(18,5))
         self.vol_slider = tk.Scale(ctrl, from_=0, to=100, orient='horizontal',
-                                   length=140, bg=C['bg'], fg=C['muted'],
+                                   length=140, bg=C['bg'], fg=C['text'],
                                    troughcolor=C['bar_bg'], activebackground=C['accent'],
                                    highlightthickness=0, bd=0, sliderlength=14,
                                    command=self._set_volume, showvalue=False)
-        self.vol_slider.set(80)
+        self.vol_slider.set(100)
         self.vol_slider.pack(side='left')
         if PYGAME_OK:
-            pygame.mixer.music.set_volume(0.8)
+            pygame.mixer.music.set_volume(1.0)
 
         self.after(60, self._redraw_canvas)
+        self._bind_hotkeys()
 
-    def _tbtn(self, parent, text, cmd, size=10, w=None, fg=None, bg=None):
+    def _tbtn(self, parent, text, cmd, size=10, w=None, fg=None, bg=None, tip=None):
         C = self.C
-        return tk.Button(parent, text=text, command=cmd,
-                         bg=bg or C['panel'], fg=fg or C['text'],
-                         activebackground=C['accent'], activeforeground='#fff',
-                         font=('Segoe UI', size), relief='flat', cursor='hand2',
-                         padx=8, pady=4, width=w, bd=0)
+        btn = tk.Button(parent, text=text, command=cmd,
+                        bg=bg or C['panel'], fg=fg or C['text'],
+                        activebackground=C['accent'], activeforeground='#fff',
+                        font=('Segoe UI', size), relief='flat', cursor='hand2',
+                        padx=8, pady=4, width=w, bd=0)
+        if tip:
+            Tooltip(btn, tip)
+        return btn
+
+    def _add_tip(self, widget, tip):
+        Tooltip(widget, tip)
 
     # ═══════════════════════════════════════════════════════════════════════
     #  SUBTITLE STYLE & POSITION
@@ -418,6 +475,26 @@ class ASMRPlayer(tk.Tk):
                              fg='#fff'       if self.sub_bold else C['text'])
         self._redraw_canvas()
 
+    def _bind_hotkeys(self):
+        """Keyboard shortcuts."""
+        self.bind('<Left>',         lambda e: self._skip(-10))
+        self.bind('<Right>',        lambda e: self._skip(10))
+        self.bind('<Up>',           lambda e: self._vol_step(+5))
+        self.bind('<Down>',         lambda e: self._vol_step(-5))
+        # + / = for next track  (normal and numpad)
+        self.bind('<plus>',         lambda e: self._next_track())
+        self.bind('<equal>',        lambda e: self._next_track())
+        self.bind('<KP_Add>',       lambda e: self._next_track())
+        # - for prev track  (normal and numpad)
+        self.bind('<minus>',        lambda e: self._prev_track())
+        self.bind('<KP_Subtract>',  lambda e: self._prev_track())
+        self.bind('<space>',        lambda e: self._toggle_play())
+
+    def _vol_step(self, delta):
+        val = max(0, min(100, self.vol_slider.get() + delta))
+        self.vol_slider.set(val)
+        self._set_volume(val)
+
     def _cycle_sub_pos(self):
         self.sub_pos_idx = (self.sub_pos_idx + 1) % len(self.SUB_POSITIONS)
         pos = self.SUB_POSITIONS[self.sub_pos_idx]
@@ -437,11 +514,9 @@ class ASMRPlayer(tk.Tk):
             return
         self.playlist  = [path]
         self.pl_index  = 0
-        self.images    = []
-        self.img_index = -1
+        # NOTE: keep existing images — only folder load resets gallery
         self.pl_label.config(text='')
-        self._set_nav_arrows(False)
-        self._load_track(path)
+        self._load_track(path, autoplay=True)
 
     def _load_sub(self):
         path = filedialog.askopenfilename(
@@ -450,6 +525,24 @@ class ASMRPlayer(tk.Tk):
         if path:
             self._load_subtitle_file(path)
 
+    def _load_images(self):
+        """Manually load one or more image files into the gallery."""
+        paths = filedialog.askopenfilenames(
+            title='Select Image Files',
+            filetypes=[
+                ('Images', '*.png *.jpg *.jpeg *.bmp *.gif *.webp *.tiff'),
+                ('All', '*.*')
+            ])
+        if not paths:
+            return
+        new_paths = sorted(paths)
+        self.images    = list(self.images) + new_paths
+        self.img_index = max(0, len(self.images) - len(new_paths))
+        self._update_nav_arrows()
+        self._redraw_canvas()
+        n = len(self.images)
+        self.pl_label.config(text=f'🖼  {n} image{"s" if n != 1 else ""} loaded')
+
     def _load_folder(self):
         folder = filedialog.askdirectory(title='Select Folder')
         if not folder:
@@ -457,17 +550,17 @@ class ASMRPlayer(tk.Tk):
         audio, images = scan_folder(folder)
         self.images    = images
         self.img_index = 0 if images else -1
-        self._set_nav_arrows(bool(images))
+        self._update_nav_arrows()
         self.playlist  = audio
         if audio:
             self.pl_index = 0
-            self._load_track(audio[0])
+            self._load_track(audio[0], autoplay=True)
         else:
             self.track_label.config(text='No audio in folder', fg=self.C['muted'])
         self.pl_label.config(
             text=f'📂 {os.path.basename(folder)}  —  {len(audio)} audio, {len(images)} images')
 
-    def _load_track(self, path):
+    def _load_track(self, path, autoplay=False):
         self._stop(silent=True)
         self.audio_file        = path
         self.duration          = get_audio_duration(path)
@@ -492,6 +585,8 @@ class ASMRPlayer(tk.Tk):
                 text=f'Track {self.pl_index+1} / {len(self.playlist)}  —  {os.path.basename(path)}')
 
         self._redraw_canvas()
+        if autoplay:
+            self.after(100, lambda: self._play_from(0))
 
     def _load_subtitle_file(self, path):
         self.cues = parse_subtitles(path)
@@ -502,11 +597,33 @@ class ASMRPlayer(tk.Tk):
     #  IMAGE GALLERY
     # ═══════════════════════════════════════════════════════════════════════
 
+    def _update_nav_arrows(self):
+        """Show nav arrows only when there are 2+ images (and images are visible)."""
+        show = len(self.images) >= 2 and not self.images_hidden
+        # Always forget everything first to reset pack order
+        self.btn_prev_img.pack_forget()
+        self.btn_next_img.pack_forget()
+        self.canvas.pack_forget()
+        if show:
+            # Pack order: prev LEFT, next RIGHT, then canvas fills the remaining middle
+            self.btn_prev_img.pack(side='left', fill='y')
+            self.btn_next_img.pack(side='right', fill='y')
+        # Canvas always fills whatever space remains
+        self.canvas.pack(side='left', fill='both', expand=True)
+
     def _set_nav_arrows(self, visible):
-        fg = self.C['muted'] if visible else self.C['bg']
-        st = 'normal'        if visible else 'disabled'
-        self.btn_prev_img.config(state=st, fg=fg)
-        self.btn_next_img.config(state=st, fg=fg)
+        """Legacy helper — delegates to _update_nav_arrows."""
+        self._update_nav_arrows()
+
+    def _toggle_hide_images(self):
+        self.images_hidden = not self.images_hidden
+        C = self.C
+        if self.images_hidden:
+            self.btn_hide_img.config(bg=C['accent'], fg='#fff', text='🐵')
+        else:
+            self.btn_hide_img.config(bg=C['panel'], fg=C['text'], text='🙈')
+        self._update_nav_arrows()
+        self._redraw_canvas()
 
     def _prev_image(self):
         if self.images:
@@ -531,7 +648,9 @@ class ASMRPlayer(tk.Tk):
         if w < 2 or h < 2:
             return
 
-        has_image = PIL_OK and bool(self.images) and 0 <= self.img_index < len(self.images)
+        has_image = (PIL_OK and bool(self.images)
+                    and 0 <= self.img_index < len(self.images)
+                    and not self.images_hidden)
 
         if has_image:
             try:
@@ -543,7 +662,7 @@ class ASMRPlayer(tk.Tk):
                 self._img_tk = ImageTk.PhotoImage(pil_img)
                 cv.create_image(w//2, h//2, image=self._img_tk, anchor='center')
                 cv.create_text(w-8, 6, text=f'{self.img_index+1} / {len(self.images)}',
-                               fill='#aaaaaa', font=('Segoe UI', 9), anchor='ne')
+                               fill=C['text'], font=('Segoe UI', 9), anchor='ne')
             except Exception:
                 has_image = False
 
@@ -559,26 +678,38 @@ class ASMRPlayer(tk.Tk):
             weight   = 'bold' if self.sub_bold else 'normal'
             sub_font = ('Segoe UI', self.sub_font_size, weight)
             cx = w // 2
-            pos = self.SUB_POSITIONS[self.sub_pos_idx]
-            if pos == 'bottom':
-                cy = h - 44
-                anchor = 'center'
-            elif pos == 'top':
-                cy = 36
-                anchor = 'center'
+            wrap_w = w - 80   # horizontal wrap limit in pixels
+
+            pos_name = self.SUB_POSITIONS[self.sub_pos_idx]
+
+            # ── Measure text height so we can clamp it inside the canvas ──
+            # Draw temporarily off-screen to measure bounding box
+            tmp_id = cv.create_text(-9999, -9999, text=txt, font=sub_font,
+                                    width=wrap_w, justify='center', anchor='center')
+            bb = cv.bbox(tmp_id)
+            cv.delete(tmp_id)
+            txt_h = (bb[3] - bb[1]) if bb else self.sub_font_size * 2
+            margin = 12  # px gap from edge
+
+            if pos_name == 'bottom':
+                cy = h - margin - txt_h // 2
+            elif pos_name == 'top':
+                cy = margin + txt_h // 2
             else:  # center
                 cy = h // 2
-                anchor = 'center'
+
+            # Hard-clamp so text never leaves the canvas
+            cy = max(margin + txt_h // 2, min(h - margin - txt_h // 2, cy))
 
             if has_image:
                 # 8-directional shadow for readability on any background
                 for dx, dy in [(-2,-2),(2,-2),(-2,2),(2,2),(0,-2),(0,2),(-2,0),(2,0)]:
                     cv.create_text(cx+dx, cy+dy, text=txt, fill='#000000',
-                                   font=sub_font, anchor=anchor,
-                                   width=w-70, justify='center')
+                                   font=sub_font, anchor='center',
+                                   width=wrap_w, justify='center')
             cv.create_text(cx, cy, text=txt, fill=C['sub_text'],
-                           font=sub_font, anchor=anchor,
-                           width=w-70, justify='center')
+                           font=sub_font, anchor='center',
+                           width=wrap_w, justify='center')
 
     # ═══════════════════════════════════════════════════════════════════════
     #  PLAYBACK
@@ -673,14 +804,12 @@ class ASMRPlayer(tk.Tk):
     def _prev_track(self):
         if self.playlist and self.pl_index > 0:
             self.pl_index -= 1
-            self._load_track(self.playlist[self.pl_index])
-            self._play_from(0)
+            self._load_track(self.playlist[self.pl_index], autoplay=True)
 
     def _next_track(self):
         if self.playlist and self.pl_index < len(self.playlist) - 1:
             self.pl_index += 1
-            self._load_track(self.playlist[self.pl_index])
-            self._play_from(0)
+            self._load_track(self.playlist[self.pl_index], autoplay=True)
 
     # ═══════════════════════════════════════════════════════════════════════
     #  SEEK BAR
